@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gif생성기 · 동영상을 gif로</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    (function () {
+      if (location.protocol !== "file:") return;
+      var ports = [8765, 8766, 8767, 8768, 8769, 8770, 8771, 8772, 8773, 8774, 8775];
+      var i = 0;
+      function fail() {
+        document.documentElement.setAttribute("data-need-server", "1");
+        var box = document.getElementById("need-server");
+        if (box) box.hidden = false;
+      }
+      document.addEventListener("DOMContentLoaded", function () {
+        if (document.documentElement.getAttribute("data-need-server") === "1") fail();
+      });
+      function next() {
+        if (i >= ports.length) { fail(); return; }
+        var port = ports[i++];
+        fetch("http://127.0.0.1:" + port + "/health", { cache: "no-store" })
+          .then(function (res) {
+            if (res.ok) location.replace("http://127.0.0.1:" + port + "/");
+            else next();
+          })
+          .catch(next);
+      }
+      next();
+    })();
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="logo" href="https://www.kmou.ac.kr/kmou/main.do">
+        <img src="assets/kmou-logo.png" alt="국립한국해양대학교">
+      </a>
+      <h1 class="title">동영상을 gif로</h1>
+      <p class="brand">gif생성기</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="need-server" class="overlay" hidden>
+      <div class="overlay-card">
+        <p>이 화면은 웹페이지로 열어야 동영상 첨부와 GIF 검색이 됩니다.</p>
+        <p>같은 폴더의 <strong>웹페이지로 열기.bat</strong> 을 실행하세요. 실행 후 검은 창은 닫지 마세요.</p>
+      </div>
+    </div>
+    <p id="load-error" class="banner" hidden></p>
+
+    <section class="giphy-box" aria-label="Giphy 검색">
+      <div class="giphy-head">
+        <h2>Giphy에서 GIF 찾기</h2>
+        <a class="giphy-link" href="https://giphy.com/gifs/quintavseverything-season-1-episode-5-3oFzmj7riGC9F8DnWM" target="_blank" rel="noreferrer">Giphy 예시</a>
+      </div>
+      <form id="giphy-form" class="giphy-form">
+        <input id="giphy-query" type="search" placeholder="키워드를 입력하세요. 예: ocean, cat, happy" maxlength="50" autocomplete="off">
+        <button type="submit" class="pick">검색</button>
+      </form>
+      <p id="giphy-status" class="hint">Giphy에 연결된 검색입니다. GIF를 누르면 변환 목록에 들어갑니다.</p>
+      <div id="giphy-results" class="giphy-results"></div>
+    </section>
+
+    <section id="dropzone" class="dropzone" aria-label="파일 넣기">
+      <p class="drop-title">동영상이나 GIF를 이 영역으로 드래그하세요</p>
+      <p class="drop-desc">여러 개를 한 번에 넣을 수 있고, 내 파일에서 선택할 수도 있습니다.</p>
+      <label class="pick pick-label" for="file">내 파일에서 선택</label>
+      <input
+        id="file"
+        class="file-input"
+        type="file"
+        multiple
+        accept="video/*,image/gif,.gif,.mp4,.m4v,.mov,.qt,.avi,.wmv,.asf,.mkv,.webm,.ogv,.ogg,.mpeg,.mpg,.ts,.mts,.m2ts,.vob,.flv,.f4v,.3gp,.3g2,.divx,.rm,.rmvb,.mxf,.dv,.y4m,.ivf,.hevc,.h265,.h264,.av1,.nut,.tod,.mod,.ogm,.nsv,.amv,.mjpeg,.mjpg"
+      >
+    </section>
+
+    <section id="workspace" class="workspace" hidden>
+      <div class="toolbar">
+        <label class="check">
+          <input id="select-all" type="checkbox" checked>
+          전체 선택
+        </label>
+        <button type="button" id="convert-selected" class="pick">선택한 파일 변환</button>
+        <button type="button" id="convert-all" class="pick pick-ghost">전체 변환</button>
+        <button type="button" id="clear-done" class="text-btn">완료 항목 지우기</button>
+      </div>
+      <div id="jobs" class="jobs"></div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var zone = document.getElementById("dropzone");
+      var input = document.getElementById("file");
+      function sendFiles(list) {
+        if (!list || !list.length) return;
+        var files = [];
+        for (var i = 0; i < list.length; i++) files.push(list[i]);
+        if (window.addMediaFiles) window.addMediaFiles(files);
+        else window.__pendingFiles = (window.__pendingFiles || []).concat(files);
+      }
+
+      ["dragenter", "dragover", "drop"].forEach(function (type) {
+        window.addEventListener(type, function (event) { event.preventDefault(); });
+      });
+      ["dragenter", "dragover"].forEach(function (type) {
+        zone.addEventListener(type, function (event) {
+          event.preventDefault();
+          zone.classList.add("is-over");
+        });
+      });
+      zone.addEventListener("dragleave", function (event) {
+        if (!zone.contains(event.relatedTarget)) zone.classList.remove("is-over");
+      });
+      zone.addEventListener("drop", function (event) {
+        event.preventDefault();
+        zone.classList.remove("is-over");
+        sendFiles(event.dataTransfer && event.dataTransfer.files);
+      });
+      input.addEventListener("change", function () {
+        sendFiles(input.files);
+        input.value = "";
+      });
+    })();
+  </script>
+  <script src="vendor/ffmpeg/ffmpeg.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
