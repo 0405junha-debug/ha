@@ -63,10 +63,7 @@ giphyForm.addEventListener("submit", async (event) => {
   giphyStatus.textContent = "Giphy에서 찾는 중...";
   giphyResults.innerHTML = "";
   try {
-    const res = await fetch("/api/giphy?" + new URLSearchParams({ q: query }));
-    if (!res.ok) throw new Error("search failed");
-    const json = await res.json();
-    const items = Array.isArray(json.data) ? json.data : [];
+    const items = await searchGiphyItems(query);
     if (!items.length) {
       giphyStatus.textContent = "\"" + query + "\"에 맞는 GIF를 찾지 못했습니다.";
       return;
@@ -92,12 +89,98 @@ function escapeAttr(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
+function parseGiphyItems(text, query) {
+  const seen = new Set();
+  const items = [];
+  const matches = String(text).matchAll(/\/gifs\/([A-Za-z0-9][A-Za-z0-9_-]{3,})/g);
+  for (const match of matches) {
+    const slug = match[1].replace(/[)#?].*$/, "");
+    const id = slug.split("-").pop();
+    if (!id || id.length < 6 || seen.has(id)) continue;
+    seen.add(id);
+    items.push({
+      id,
+      title: query,
+      preview: "https://media.giphy.com/media/" + id + "/200.gif",
+      url: "https://media.giphy.com/media/" + id + "/giphy.gif",
+    });
+    if (items.length >= 24) break;
+  }
+  return items;
+}
+
+function fromOfficialGiphy(json, query) {
+  return (json.data || []).map((item) => {
+    const images = item.images || {};
+    return {
+      id: item.id,
+      title: item.title || query,
+      preview: (images.fixed_height_small || images.fixed_height || images.downsized || {}).url,
+      url: (images.original || images.downsized || {}).url,
+    };
+  }).filter((item) => item.preview && item.url);
+}
+
+async function searchGiphyItems(query) {
+  try {
+    const res = await fetch("/api/giphy?" + new URLSearchParams({ q: query }));
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json.data) && json.data.length) return json.data;
+    }
+  } catch (error) {}
+
+  const key = (window.localStorage && localStorage.getItem("giphyApiKey")) || "";
+  if (key) {
+    try {
+      const res = await fetch("https://api.giphy.com/v1/gifs/search?" + new URLSearchParams({
+        api_key: key,
+        q: query,
+        limit: "24",
+        rating: "pg-13",
+        lang: "ko",
+      }));
+      if (res.ok) {
+        const items = fromOfficialGiphy(await res.json(), query);
+        if (items.length) return items;
+      }
+    } catch (error) {}
+  }
+
+  const sources = [
+    "https://r.jina.ai/https://giphy.com/search/" + encodeURIComponent(query),
+    "https://r.jina.ai/http://giphy.com/search/" + encodeURIComponent(query),
+  ];
+  for (const src of sources) {
+    try {
+      const res = await fetch(src, { headers: { Accept: "text/plain" } });
+      if (!res.ok) continue;
+      const items = parseGiphyItems(await res.text(), query);
+      if (items.length) return items;
+    } catch (error) {}
+  }
+  throw new Error("search failed");
+}
+
+async function fetchGifBlob(url) {
+  const sources = [
+    url,
+    "/api/giphy-file?" + new URLSearchParams({ url }),
+  ];
+  for (const src of sources) {
+    try {
+      const res = await fetch(src);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (blob && blob.size > 32) return blob;
+    } catch (error) {}
+  }
+  throw new Error("gif fetch");
+}
+
 async function addGiphyGif(item, query) {
   try {
-    const src = "/api/giphy-file?" + new URLSearchParams({ url: item.url });
-    const res = await fetch(src);
-    if (!res.ok) throw new Error("gif fetch");
-    const blob = await res.blob();
+    const blob = await fetchGifBlob(item.url);
     const name = sanitizeName((item.title || query || "giphy").replace(/\s+/g, "-"), "gif");
     const file = new File([blob], name, { type: "image/gif" });
     window.addMediaFiles([file]);
