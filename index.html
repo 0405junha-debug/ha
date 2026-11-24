@@ -52,6 +52,64 @@
     </div>
     <p id="load-error" class="banner" hidden></p>
 
+    <nav class="mode-tabs" aria-label="작업 선택">
+      <button class="mode-tab is-active" type="button" data-view="generator-view">동영상 GIF 생성</button>
+      <button class="mode-tab" type="button" data-view="editor-view">GIF 편집</button>
+    </nav>
+
+    <section id="editor-view" class="editor-view" hidden>
+      <header class="editor-hero">
+        <span class="hero-kicker">SMART GIF STUDIO</span>
+        <h2>쓰기 쉬운 GIF 편집기</h2>
+        <p>GIF 파일을 간편히 편집하기</p>
+      </header>
+      <section id="gif-upload" class="gif-upload" aria-label="GIF 파일 선택">
+        <div class="upload-icon" aria-hidden="true">✦</div>
+        <h3>편집할 GIF를 여기에 놓아주세요</h3>
+        <p>한 번에 GIF 파일 하나를 선택할 수 있어요.</p>
+        <label class="pick upload-button" for="gif-file">GIF 파일 선택</label>
+        <input id="gif-file" class="file-input" type="file" accept="image/gif,.gif">
+        <span class="format-hint">편집 가능한 형식 <b>.GIF</b></span>
+      </section>
+      <p id="gif-upload-message" class="upload-message" role="status" hidden></p>
+      <section id="gif-workbench" class="gif-workbench" hidden>
+        <div class="preview-column">
+          <article class="preview-card" id="original-panel">
+            <header class="panel-heading"><button class="panel-toggle" type="button" data-target="original-content" aria-label="원본 GIF 패널 접기">−</button><h3>Original GIF</h3></header>
+            <div id="original-content" class="preview-content"></div>
+          </article>
+          <article class="preview-card result-card" id="result-panel" hidden>
+            <header class="panel-heading"><button class="panel-toggle" type="button" data-target="result-content" aria-label="편집 GIF 패널 접기">−</button><h3 id="result-title">Edited GIF</h3></header>
+            <div id="result-content" class="preview-content"></div>
+          </article>
+        </div>
+        <aside class="tools-card">
+          <div class="tools-heading"><span class="hero-kicker">EDITOR TOOLS</span><h3 id="tool-panel-title">편집 도구</h3></div>
+          <div id="tool-picker" class="tool-grid" aria-label="편집 도구">
+            <button type="button" class="tool-button" data-tool="resize"><span>↔</span>Resize</button>
+            <button type="button" class="tool-button" data-tool="crop"><span>⌗</span>Crop</button>
+            <button type="button" class="tool-button" data-tool="downsize"><span>⇩</span>Downsizing</button>
+            <button type="button" class="tool-button" data-tool="format"><span>⇄</span>Format Convert</button>
+            <button type="button" class="tool-button" data-tool="rotate"><span>⟳</span>Rotate</button>
+            <button type="button" class="tool-button" data-tool="optimize"><span>✧</span>Optimize</button>
+            <button type="button" class="tool-button" data-tool="reverse"><span>◀</span>Reverse</button>
+            <button type="button" class="tool-button" data-tool="speed"><span>◷</span>Speed</button>
+            <button type="button" class="tool-button" data-tool="cut"><span>✂</span>Cut</button>
+          </div>
+          <div id="editor-tool-panel" class="editor-tool-panel" hidden></div>
+          <section class="save-box">
+            <h4>저장 옵션</h4>
+            <label for="save-filename">파일명</label>
+            <input id="save-filename" class="name-input" type="text">
+            <div class="folder-row"><span>저장 위치</span><span id="save-folder-label">다운로드 폴더 (브라우저 기본 위치)</span><button id="choose-folder" class="text-btn" type="button">폴더 선택</button></div>
+            <button id="save-edited" class="pick save-button" type="button" disabled>편집 파일 저장</button>
+          </section>
+        </aside>
+      </section>
+    </section>
+
+    <div id="generator-view">
+
     <section class="giphy-box" aria-label="Giphy 검색">
       <div class="giphy-head">
         <h2>Giphy에서 GIF 찾기</h2>
@@ -90,6 +148,7 @@
       </div>
       <div id="jobs" class="jobs"></div>
     </section>
+    </div>
   </main>
 
   <script>
@@ -129,5 +188,6 @@
   </script>
   <script src="vendor/ffmpeg/ffmpeg.umd.js"></script>
   <script src="app.js"></script>
+  <script src="editor.js"></script>
 </body>
 </html>
