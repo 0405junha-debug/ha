@@ -18,7 +18,7 @@
   const folderLabel = $('#save-folder-label');
   const saveButton = $('#save-edited');
   const toolNames = { resize: 'Resize', crop: 'Crop', downsize: 'Downsizing', format: 'Format Convert', rotate: 'Rotate', optimize: 'Optimize', reverse: 'Reverse', speed: 'Speed', cut: 'Cut' };
-  const state = { file: null, width: 0, height: 0, duration: 0, output: null, outputBlob: null, outputName: '', outputType: 'image/gif', folder: null, busy: false, ratioLocked: true, originalUrl: '' };
+  const state = { file: null, kind: '', width: 0, height: 0, duration: 0, output: null, outputBlob: null, outputName: '', outputType: 'image/gif', folder: null, busy: false, ratioLocked: true, originalUrl: '' };
 
   tabs.forEach((tab) => tab.addEventListener('click', () => {
     tabs.forEach((item) => item.classList.toggle('is-active', item === tab));
@@ -40,7 +40,7 @@
   }
 
   function cleanStem(name) {
-    return (name || 'animation.gif').replace(/[\\/:*?"<>|]/g, '_').replace(/\.gif$/i, '') || 'animation';
+    return (name || 'animation.gif').replace(/[\\/:*?"<>|]/g, '_').replace(/\.[^.]+$/, '') || 'animation';
   }
 
   function gifDuration(bytes) {
@@ -57,60 +57,112 @@
   function showMeta(file, width, height, duration) {
     const meta = document.createElement('div');
     meta.className = 'gif-meta';
-    meta.innerHTML = `<span>${width} × ${height}</span><span>${formatBytes(file.size)}</span><span>${duration ? `${duration.toFixed(2)}초` : '애니메이션'}</span>`;
+    meta.innerHTML = `<span>${width} × ${height}</span><span>${formatBytes(file.size)}</span><span>${duration ? `${duration.toFixed(2)}초` : '길이 정보 없음'}</span>`;
     return meta;
   }
 
   function displayOriginal(file) {
     originalContent.replaceChildren();
-    const img = document.createElement('img');
-    img.className = 'gif-preview';
-    img.alt = '원본 GIF 미리보기';
-    state.originalUrl = URL.createObjectURL(file);
-    img.src = state.originalUrl;
-    originalContent.append(img, showMeta(file, state.width, state.height, state.duration));
+    const preview = document.createElement(state.kind === 'video' ? 'video' : 'img');
+    preview.className = 'gif-preview';
+    if (state.kind === 'video') {
+      preview.controls = true;
+      preview.loop = true;
+      preview.playsInline = true;
+      preview.preload = 'metadata';
+    } else {
+      preview.alt = '원본 GIF 미리보기';
+    }
+    preview.src = state.originalUrl;
+    originalContent.append(preview, showMeta(file, state.width, state.height, state.duration));
   }
 
-  async function loadGif(file) {
+  function detectMediaKind(file) {
+    const name = (file.name || '').toLowerCase();
+    if (file.type === 'image/gif' || name.endsWith('.gif')) return 'gif';
+    if ((file.type || '').toLowerCase().startsWith('video/') || /\.(mp4|m4v|mov|webm|avi|mkv|3gp|mpeg|mpg|ogv)$/i.test(name)) return 'video';
+    return '';
+  }
+
+  function readVideoInfo(file, url) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const timeout = setTimeout(() => finish(false, new Error('동영상 정보를 읽는 데 시간이 오래 걸립니다. MP4, MOV 또는 WEBM 파일을 사용해 주세요.')), 15000);
+      let settled = false;
+      const finish = (ok, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        video.removeAttribute('src');
+        video.load();
+        if (ok) resolve(value); else reject(value);
+      };
+      video.preload = 'metadata';
+      video.muted = true;
+      video.onloadedmetadata = () => {
+        if (!video.videoWidth || !video.videoHeight) return finish(false, new Error('동영상 해상도를 확인할 수 없습니다.'));
+        finish(true, { width: video.videoWidth, height: video.videoHeight, duration: Number.isFinite(video.duration) ? video.duration : 0 });
+      };
+      video.onerror = () => finish(false, new Error('이 브라우저에서 미리 볼 수 없는 동영상입니다. MP4, MOV 또는 WEBM으로 선택해 주세요.'));
+      video.src = url;
+    });
+  }
+
+  async function loadMedia(file) {
     if (!file) return;
-    if (file.type !== 'image/gif' && !/\.gif$/i.test(file.name)) {
-      report('GIF 형식 파일만 편집할 수 있어요. 파일 형식을 확인한 뒤 .GIF 파일을 선택해 주세요.', true);
+    const kind = detectMediaKind(file);
+    if (!kind) {
+      report('GIF 또는 동영상 파일을 선택해 주세요. 지원 형식은 GIF, MP4, MOV, WEBM입니다.', true);
       input.value = '';
       return;
     }
-    if (state.originalUrl) URL.revokeObjectURL(state.originalUrl);
-    if (state.output) URL.revokeObjectURL(state.output);
-    state.file = file;
-    state.output = null;
-    state.outputBlob = null;
-    resultPanel.hidden = true;
-    saveButton.disabled = true;
-    const header = new Uint8Array(await file.slice(0, 13).arrayBuffer());
-    if (header.length < 10 || new TextDecoder().decode(header.slice(0, 6)) !== 'GIF87a' && new TextDecoder().decode(header.slice(0, 6)) !== 'GIF89a') {
-      state.file = null;
-      report('선택한 파일의 실제 내용이 GIF가 아닙니다. 편집 가능한 포맷은 GIF입니다.', true);
-      return;
+    const url = URL.createObjectURL(file);
+    try {
+      let info;
+      if (kind === 'gif') {
+        const header = new Uint8Array(await file.slice(0, 13).arrayBuffer());
+        const signature = new TextDecoder().decode(header.slice(0, 6));
+        if (header.length < 10 || (signature !== 'GIF87a' && signature !== 'GIF89a')) throw new Error('파일 내용이 GIF 형식과 다릅니다. 올바른 GIF를 선택해 주세요.');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        info = { width: header[6] | (header[7] << 8), height: header[8] | (header[9] << 8), duration: gifDuration(bytes) };
+      } else {
+        info = await readVideoInfo(file, url);
+      }
+      if (state.originalUrl) URL.revokeObjectURL(state.originalUrl);
+      if (state.output) URL.revokeObjectURL(state.output);
+      state.file = file;
+      state.kind = kind;
+      state.width = info.width;
+      state.height = info.height;
+      state.duration = info.duration;
+      state.originalUrl = url;
+      state.output = null;
+      state.outputBlob = null;
+      resultPanel.hidden = true;
+      saveButton.disabled = true;
+      upload.hidden = true;
+      workbench.hidden = false;
+      $('#original-title').textContent = kind === 'gif' ? 'Original GIF' : 'Original Video';
+      report(`${kind === 'gif' ? 'GIF' : '동영상'} 파일을 불러왔습니다. 편집 도구를 선택해 주세요.`);
+      displayOriginal(file);
+      filename.value = `${cleanStem(file.name)}_ed.gif`;
+      folderLabel.textContent = '다운로드 폴더 (브라우저 기본 위치)';
+      state.ratioLocked = true;
+      resetToolPanel();
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      report(error.message || '파일을 불러오지 못했습니다.', true);
+      input.value = '';
     }
-    state.width = header[6] | (header[7] << 8);
-    state.height = header[8] | (header[9] << 8);
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    state.duration = gifDuration(bytes);
-    upload.hidden = true;
-    report('GIF 파일을 불러왔습니다. 편집 도구를 선택해 주세요.');
-    workbench.hidden = false;
-    displayOriginal(file);
-    filename.value = `${cleanStem(file.name)}_ed.gif`;
-    folderLabel.textContent = '다운로드 폴더 (브라우저 기본 위치)';
-    resetToolPanel();
   }
 
-  input.addEventListener('change', () => loadGif(input.files && input.files[0]));
+  input.addEventListener('change', () => loadMedia(input.files && input.files[0]));
   ['dragenter', 'dragover'].forEach((eventName) => upload.addEventListener(eventName, (event) => { event.preventDefault(); upload.classList.add('is-over'); }));
   ['dragleave', 'drop'].forEach((eventName) => upload.addEventListener(eventName, (event) => { event.preventDefault(); upload.classList.remove('is-over'); }));
   upload.addEventListener('drop', (event) => {
     const files = event.dataTransfer && event.dataTransfer.files;
-    if (!files || files.length !== 1) return report('GIF 파일은 한 번에 하나씩 선택해 주세요.', true);
-    loadGif(files[0]);
+    if (!files || files.length !== 1) return report('GIF 또는 동영상 파일은 한 번에 하나씩 선택해 주세요.', true);
+    loadMedia(files[0]);
   });
 
   function resetToolPanel() {
@@ -210,6 +262,14 @@
     } else if (name === 'speed') {
       const speed = select([['0.25× 느리게', '0.25'], ['0.5× 느리게', '0.5'], ['1× 원래 속도', '1'], ['1.5× 빠르게', '1.5'], ['2× 빠르게', '2'], ['3× 빠르게', '3']]);
       add(field('재생 속도', speed)); extras.filter = () => [`setpts=PTS/${speed.value}`];
+      extras.audioFilter = () => {
+        let rate = Number(speed.value);
+        const filters = [];
+        while (rate > 2) { filters.push('atempo=2'); rate /= 2; }
+        while (rate < 0.5) { filters.push('atempo=0.5'); rate /= 0.5; }
+        filters.push(`atempo=${rate}`);
+        return filters.join(',');
+      };
     } else if (name === 'cut') {
       const start = numberInput(0, 0, Math.max(0, state.duration), 0.1); start.step = '0.1';
       const duration = numberInput(Math.max(0.1, state.duration), 0.1, Math.max(0.1, state.duration), 0.1); duration.step = '0.1';
@@ -256,13 +316,18 @@
         const chain = filters.length ? `${filters.join(',')},` : '';
         args.push('-filter_complex', `[0:v]${chain}split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer[out]`, '-map', '[out]');
       } else if (filters.length) args.push('-vf', filters.join(','));
-      if (format === 'mp4') args.push('-an', '-movflags', '+faststart', '-pix_fmt', 'yuv420p');
-      if (format === 'jpg') args.push('-frames:v', '1', '-q:v', '2');
+      if (format === 'mp4') {
+        if (state.kind === 'gif') args.push('-an');
+        else if (options.audioFilter) args.push('-af', options.audioFilter());
+        args.push('-movflags', '+faststart', '-pix_fmt', 'yuv420p');
+      }
+      if (format === 'jpg') args.push('-an', '-frames:v', '1', '-q:v', '2');
+      if (format === 'gif') args.push('-an');
       if (options.args) args.push(...options.args());
       if (format === 'gif') args.push('-loop', '0');
       args.push(outName);
       const exit = await ffmpeg.exec(args);
-      if (exit !== 0) throw new Error('이 설정으로 GIF를 처리하지 못했습니다. 옵션을 조정해 다시 시도해 주세요.');
+      if (exit !== 0) throw new Error('이 동영상 형식 또는 설정을 처리하지 못했습니다. MP4, MOV, WEBM 파일이나 다른 설정으로 다시 시도해 주세요.');
       const result = await ffmpeg.readFile(outName);
       const mime = format === 'mp4' ? 'video/mp4' : format === 'jpg' ? 'image/jpeg' : 'image/gif';
       if (state.output) URL.revokeObjectURL(state.output);
@@ -290,7 +355,7 @@
     resultContent.append(preview);
     const meta = document.createElement('div'); meta.className = 'gif-meta'; meta.innerHTML = `<span>${format.toUpperCase()}</span><span>${formatBytes(state.outputBlob.size)}</span>`; resultContent.append(meta);
     const download = document.createElement('a'); download.className = 'pick result-download'; download.href = state.output; download.download = state.outputName; download.textContent = '결과 파일 다운로드'; resultContent.append(download);
-    $('#result-title').textContent = format === 'gif' && state.outputName.startsWith('Resized_') ? 'Resized GIF' : 'Edited GIF';
+    $('#result-title').textContent = format === 'mp4' ? 'Converted MP4' : format === 'jpg' ? 'Converted JPG' : state.outputName.startsWith('Resized_') ? 'Resized GIF' : 'Edited GIF';
     resultPanel.hidden = false; saveButton.disabled = false;
   }
 

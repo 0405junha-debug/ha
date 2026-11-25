@@ -54,28 +54,28 @@
 
     <nav class="mode-tabs" aria-label="작업 선택">
       <button class="mode-tab is-active" type="button" data-view="generator-view">동영상 GIF 생성</button>
-      <button class="mode-tab" type="button" data-view="editor-view">GIF 편집</button>
+      <button class="mode-tab" type="button" data-view="editor-view">GIF·동영상 편집</button>
     </nav>
 
     <section id="editor-view" class="editor-view" hidden>
       <header class="editor-hero">
         <span class="hero-kicker">SMART GIF STUDIO</span>
-        <h2>쓰기 쉬운 GIF 편집기</h2>
-        <p>GIF 파일을 간편히 편집하기</p>
+        <h2>쓰기 쉬운 GIF·동영상 편집기</h2>
+        <p>GIF와 동영상을 간편히 편집하기</p>
       </header>
-      <section id="gif-upload" class="gif-upload" aria-label="GIF 파일 선택">
+      <section id="gif-upload" class="gif-upload" aria-label="GIF 또는 동영상 파일 선택">
         <div class="upload-icon" aria-hidden="true">✦</div>
-        <h3>편집할 GIF를 여기에 놓아주세요</h3>
-        <p>한 번에 GIF 파일 하나를 선택할 수 있어요.</p>
-        <label class="pick upload-button" for="gif-file">GIF 파일 선택</label>
-        <input id="gif-file" class="file-input" type="file" accept="image/gif,.gif">
-        <span class="format-hint">편집 가능한 형식 <b>.GIF</b></span>
+        <h3>편집할 GIF 또는 동영상을 여기에 놓아주세요</h3>
+        <p>한 번에 파일 하나를 선택할 수 있어요.</p>
+        <label class="pick upload-button" for="gif-file">파일 선택</label>
+        <input id="gif-file" class="file-input" type="file" accept="image/gif,video/*,.gif,.mp4,.m4v,.mov,.webm,.avi,.mkv,.3gp">
+        <span class="format-hint">지원 형식 <b>GIF</b><b>MP4</b><b>MOV</b><b>WEBM</b> 등</span>
       </section>
       <p id="gif-upload-message" class="upload-message" role="status" hidden></p>
       <section id="gif-workbench" class="gif-workbench" hidden>
         <div class="preview-column">
           <article class="preview-card" id="original-panel">
-            <header class="panel-heading"><button class="panel-toggle" type="button" data-target="original-content" aria-label="원본 GIF 패널 접기">−</button><h3>Original GIF</h3></header>
+            <header class="panel-heading"><button class="panel-toggle" type="button" data-target="original-content" aria-label="원본 미리보기 패널 접기">−</button><h3 id="original-title">Original</h3></header>
             <div id="original-content" class="preview-content"></div>
           </article>
           <article class="preview-card result-card" id="result-panel" hidden>
