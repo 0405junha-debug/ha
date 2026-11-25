@@ -226,8 +226,8 @@
       lock.addEventListener('click', () => { state.ratioLocked = !state.ratioLocked; lock.textContent = state.ratioLocked ? '🔒 비율 유지' : '🔓 비율 고정 해제'; });
       const axis = (label, range, value) => { const row = document.createElement('div'); row.className = 'slider-field'; const heading = document.createElement('div'); heading.className = 'slider-heading'; heading.innerHTML = `<b>${label}</b><span>${range.min}–${range.max}px</span>`; row.append(heading, range, value); return row; };
       add(axis('가로 · X', xRange, xValue), lock, axis('세로 · Y', yRange, yValue));
-      extras.filter = () => [`scale=${xValue.value}:${yValue.value}:flags=lanczos`];
-      extras.outputName = () => `Resized_${cleanStem(state.file.name)}.gif`;
+      extras.filter = () => [`scale=trunc(${xValue.value}/2)*2:trunc(${yValue.value}/2)*2:flags=lanczos`];
+      extras.outputName = () => `Resized_${cleanStem(state.file.name)}.${state.kind === 'video' ? 'mp4' : 'gif'}`;
     } else if (name === 'crop') {
       const ratio = select([['원본 비율 유지', 'original'], ['정사각형 1:1', '1:1'], ['가로 4:3', '4:3'], ['와이드 16:9', '16:9'], ['세로 3:4', '3:4']], 'original');
       const fill = select([['빈 영역을 단색으로 채우기', 'pad'], ['이미지를 확대해 빈 공간 없애기', 'cover']], 'pad');
@@ -242,11 +242,12 @@
       };
     } else if (name === 'downsize') {
       const size = checkbox('이미지 해상도를 75%로 줄이기'); const frames = checkbox('프레임 빈도 낮추기 (초당 15프레임)'); const palette = checkbox('색상 팔레트 줄이기 (128색)');
+      if (state.kind === 'video') palette.node.hidden = true;
       add(size.node, frames.node, palette.node);
       extras.filter = () => [...(size.input.checked ? ['scale=iw*0.75:ih*0.75:flags=lanczos'] : []), ...(frames.input.checked ? ['fps=15'] : [])];
-      extras.palette = () => palette.input.checked;
+      extras.palette = () => state.kind === 'gif' && palette.input.checked;
     } else if (name === 'format') {
-      const format = select([['MP4 동영상', 'mp4'], ['JPG 이미지 (첫 프레임)', 'jpg']]); add(field('변환 형식', format));
+      const format = select([['MP4 동영상', 'mp4'], ['GIF 애니메이션', 'gif'], ['JPG 이미지 (첫 프레임)', 'jpg']], state.kind === 'video' ? 'gif' : 'mp4'); add(field('변환 형식', format));
       extras.format = () => format.value;
     } else if (name === 'rotate') {
       const turn = select([['회전 없음', 'none'], ['90° 시계 방향', 'cw'], ['180°', 'half'], ['270° 시계 방향', 'ccw']]);
@@ -255,10 +256,11 @@
       extras.filter = () => [...(turn.value === 'cw' ? ['transpose=1'] : turn.value === 'ccw' ? ['transpose=2'] : turn.value === 'half' ? ['hflip', 'vflip'] : []), ...(mirror.value === 'none' ? [] : [mirror.value])];
     } else if (name === 'optimize') {
       add(document.createTextNode('프레임 차분 인코딩과 반복 재생 최적화를 적용합니다.'));
-      extras.args = () => ['-gifflags', '+transdiff+offsetting'];
+      extras.args = () => state.kind === 'gif' ? ['-gifflags', '+transdiff+offsetting'] : ['-crf', '23'];
     } else if (name === 'reverse') {
       add(document.createTextNode('GIF 애니메이션의 프레임 순서를 거꾸로 재생합니다.'));
       extras.filter = () => ['reverse'];
+      extras.audioFilter = () => 'areverse';
     } else if (name === 'speed') {
       const speed = select([['0.25× 느리게', '0.25'], ['0.5× 느리게', '0.5'], ['1× 원래 속도', '1'], ['1.5× 빠르게', '1.5'], ['2× 빠르게', '2'], ['3× 빠르게', '3']]);
       add(field('재생 속도', speed)); extras.filter = () => [`setpts=PTS/${speed.value}`];
@@ -303,10 +305,11 @@
       ffmpeg = await getEditorFfmpeg();
       const ext = state.file.name.split('.').pop().toLowerCase() || 'gif';
       const inName = `source.${ext}`;
-      const format = options.format ? options.format() : 'gif';
+      const format = options.format ? options.format() : state.kind === 'video' ? 'mp4' : 'gif';
       const outName = `edited.${format}`;
       await ffmpeg.writeFile(inName, new Uint8Array(await state.file.arrayBuffer()));
       const filters = options.filter ? options.filter() : [];
+      if (format === 'mp4') filters.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
       const args = [];
       const seek = options.seek ? options.seek() : 0;
       if (seek > 0) args.push('-ss', String(seek));
@@ -355,7 +358,7 @@
     resultContent.append(preview);
     const meta = document.createElement('div'); meta.className = 'gif-meta'; meta.innerHTML = `<span>${format.toUpperCase()}</span><span>${formatBytes(state.outputBlob.size)}</span>`; resultContent.append(meta);
     const download = document.createElement('a'); download.className = 'pick result-download'; download.href = state.output; download.download = state.outputName; download.textContent = '결과 파일 다운로드'; resultContent.append(download);
-    $('#result-title').textContent = format === 'mp4' ? 'Converted MP4' : format === 'jpg' ? 'Converted JPG' : state.outputName.startsWith('Resized_') ? 'Resized GIF' : 'Edited GIF';
+    $('#result-title').textContent = state.outputName.startsWith('Resized_') ? `Resized ${format.toUpperCase()}` : format === 'mp4' ? 'Edited MP4' : format === 'jpg' ? 'Converted JPG' : 'Edited GIF';
     resultPanel.hidden = false; saveButton.disabled = false;
   }
 
